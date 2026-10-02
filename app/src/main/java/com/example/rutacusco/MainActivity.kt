@@ -36,7 +36,7 @@ fun AppNavHost() {
             UIhome(onNavigateToExplorar = { navController.navigate(RUTA_EXPLORAR) })
         }
         composable(RUTA_EXPLORAR) {
-            UIexplorar()
+            UIexplorar(onNavigateToHome = { navController.navigate(RUTA_HOME)})
         }
     }
 }
