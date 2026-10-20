@@ -31,12 +31,23 @@ class MainActivity : ComponentActivity() {
 fun AppNavHost() {
     val navController = rememberNavController()
 
-    NavHost(navController = navController, startDestination = RUTA_HOME) {
+    NavHost(
+        navController = navController,
+        startDestination = RUTA_HOME
+    ) {
         composable(RUTA_HOME) {
-            UIhome(onNavigateToExplorar = { navController.navigate(RUTA_EXPLORAR) })
+            UIhome(
+                onNavigateToExplorar = {
+                    navController.navigate(RUTA_EXPLORAR)
+                }
+            )
         }
         composable(RUTA_EXPLORAR) {
-            UIexplorar(onNavigateToHome = { navController.navigate(RUTA_HOME)})
+            UIexplorar(
+                onNavigateToHome = {
+                    navController.navigate(RUTA_HOME)
+                }
+            )
         }
     }
 }
