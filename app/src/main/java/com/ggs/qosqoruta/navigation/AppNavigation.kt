@@ -1,7 +1,13 @@
 package com.ggs.qosqoruta.navigation
 
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
@@ -15,6 +21,7 @@ import com.ggs.qosqoruta.features.auth.presentation.login.LoginViewModel
 import com.ggs.qosqoruta.features.auth.presentation.register.RegisterScreen
 import com.ggs.qosqoruta.features.auth.presentation.register.RegisterViewModel
 import com.ggs.qosqoruta.features.mapa.presentation.HomeScreen
+import kotlinx.coroutines.delay
 
 @Composable
 fun AppNavigation(
@@ -23,55 +30,42 @@ fun AppNavigation(
     isDarkMode: Boolean
 ) {
     val navController = rememberNavController()
-    
-    // Si la sesión está activa, arranca directamente en la pantalla principal ("main")
     val startDestination = if (sessionManager.isLoggedIn()) "main" else "login"
 
     NavHost(navController = navController, startDestination = startDestination) {
-        
-        // PANTALLA DE LOGIN
         composable("login") {
             val context = LocalContext.current
             val factory = remember { AuthViewModelFactory(context) }
             val viewModel: LoginViewModel = viewModel(factory = factory)
-            
             LoginScreen(
                 viewModel = viewModel,
-                onNavigateToRegister = {
-                    navController.navigate("register")
-                },
+                onNavigateToRegister = { navController.navigate("register") },
                 onLoginSuccess = {
-                    // Navegamos al main limpiando la pila para que no pueda volver atrás con back
-                    navController.navigate("main") {
-                        popUpTo("login") { inclusive = true }
-                    }
+                    navController.navigate("splash") { popUpTo("login") { inclusive = true } }
                 }
             )
         }
-
-        // PANTALLA DE REGISTRO
         composable("register") {
             val context = LocalContext.current
             val factory = remember { AuthViewModelFactory(context) }
             val viewModel: RegisterViewModel = viewModel(factory = factory)
-            
-            RegisterScreen(
-                viewModel = viewModel,
-                onNavigateToLogin = {
-                    navController.popBackStack() // Vuelve hacia el login
-                }
-            )
+            RegisterScreen(viewModel = viewModel, onNavigateToLogin = { navController.popBackStack() })
         }
-
-        // PANTALLA PRINCIPAL (MAPA, RUTAS, ETC)
+        composable("splash") {
+            LaunchedEffect(Unit) { delay(2000); navController.navigate("main") { popUpTo("splash") { inclusive = true } } }
+            Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                Box(modifier = Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(imageVector = Icons.Filled.DirectionsBus, contentDescription = "Logo", modifier = Modifier.size(100.dp), tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Text(text = "Bienvenido, ${sessionManager.getUserName()}", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+        }
         composable("main") {
             HomeScreen(
-                onLogout = {
-                    sessionManager.clearSession()
-                    navController.navigate("login") {
-                        popUpTo("main") { inclusive = true }
-                    }
-                },
+                onLogout = { sessionManager.clearSession(); navController.navigate("login") { popUpTo("main") { inclusive = true } } },
                 isDarkMode = isDarkMode,
                 onThemeChanged = { isDark -> themeManager.setDarkMode(isDark) }
             )
