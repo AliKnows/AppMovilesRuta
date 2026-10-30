@@ -7,14 +7,12 @@ plugins {
 
 android {
     namespace = "com.ggs.qosqoruta"
-    compileSdk {
-        version = release(37)
-    }
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.ggs.qosqoruta"
         minSdk = 24
-        targetSdk = 37
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0"
 
@@ -34,6 +32,11 @@ android {
     }
     buildFeatures {
         compose = true
+    }
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 }
 
@@ -55,58 +58,48 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     // ---------------------------------------------------------
-    // 1. JETPACK COMPOSE & MATERIAL ICONS (Regla de oro de UI)
+    // 1. JETPACK COMPOSE & MATERIAL ICONS
     // ---------------------------------------------------------
     implementation(platform("androidx.compose:compose-bom:2024.02.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
-    // Librería extendida de iconos Material Design 3
     implementation("androidx.compose.material:material-icons-extended")
 
     // ---------------------------------------------------------
-    // 2. GOOGLE CREDENTIAL MANAGER (Autenticación Remota)
+    // 2. GOOGLE CREDENTIAL MANAGER
     // ---------------------------------------------------------
     implementation("androidx.credentials:credentials:1.2.1")
     implementation("androidx.credentials:credentials-play-services-auth:1.2.1")
     implementation("com.google.android.libraries.identity.googleid:googleid:1.1.0")
 
     // ---------------------------------------------------------
-    // 3. ROOM & SQLCIPHER (Base de datos local cifrada)
+    // 3. ROOM & SQLCIPHER
     // ---------------------------------------------------------
     val roomVersion = "2.6.1"
     implementation("androidx.room:room-runtime:$roomVersion")
     implementation("androidx.room:room-ktx:$roomVersion")
     implementation("net.zetetic:android-database-sqlcipher:4.5.4")
     implementation("androidx.sqlite:sqlite-ktx:2.4.0")
-    // 3. ASEGÚRATE DE QUE DICE "ksp" AQUÍ:
     ksp("androidx.room:room-compiler:$roomVersion")
 
-    // SQLCipher para encriptar la base de datos (SQLite)
-    implementation("net.zetetic:android-database-sqlcipher:4.5.4")
-    implementation("androidx.sqlite:sqlite-ktx:2.4.0")
-
     // ---------------------------------------------------------
-    // 4. MAPS & LOCATION SERVICES (Geolocalización)
+    // 4. MAPS & LOCATION SERVICES
     // ---------------------------------------------------------
     implementation("com.google.android.gms:play-services-maps:18.2.0")
     implementation("com.google.android.gms:play-services-location:21.2.0")
-    // Maps Compose (Librería oficial de Google para usar mapas en Jetpack Compose)
     implementation("com.google.maps.android:maps-compose:4.3.3")
 
     // ---------------------------------------------------------
-    // 5. CRIPTOGRAFÍA (Para Hashear contraseñas locales)
+    // 5. CRIPTOGRAFÍA Y SEGURIDAD
     // ---------------------------------------------------------
-    // Provee implementaciones seguras para encriptación de datos (útil para complementos de seguridad)
     implementation("androidx.security:security-crypto-ktx:1.1.0-alpha06")
 
     // ---------------------------------------------------------
     // 6. NAVIGATION COMPOSE
     // ---------------------------------------------------------
     implementation("androidx.navigation:navigation-compose:2.7.7")
-
-
 }
 
 ksp {

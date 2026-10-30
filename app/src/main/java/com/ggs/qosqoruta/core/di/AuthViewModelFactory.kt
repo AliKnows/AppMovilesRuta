@@ -4,13 +4,11 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.ggs.qosqoruta.core.database.QosQoRutaDatabase
+import com.ggs.qosqoruta.core.preferences.SessionManager
 import com.ggs.qosqoruta.features.auth.data.repository.AuthRepositoryImpl
-import com.ggs.qosqoruta.features.auth.domain.usecases.LoginLocalUserUseCase
 import com.ggs.qosqoruta.features.auth.domain.usecases.RegisterLocalUserUseCase
 import com.ggs.qosqoruta.features.auth.presentation.login.LoginViewModel
 import com.ggs.qosqoruta.features.auth.presentation.register.RegisterViewModel
-
-import com.ggs.qosqoruta.core.preferences.SessionManager
 
 class AuthViewModelFactory(private val context: Context) : ViewModelProvider.Factory {
 
@@ -24,7 +22,7 @@ class AuthViewModelFactory(private val context: Context) : ViewModelProvider.Fac
             return RegisterViewModel(RegisterLocalUserUseCase(repository)) as T
         }
         if (modelClass.isAssignableFrom(LoginViewModel::class.java)) {
-            return LoginViewModel(LoginLocalUserUseCase(repository), sessionManager) as T
+            return LoginViewModel(repository, sessionManager) as T
         }
 
         throw IllegalArgumentException("ViewModel desconocido")

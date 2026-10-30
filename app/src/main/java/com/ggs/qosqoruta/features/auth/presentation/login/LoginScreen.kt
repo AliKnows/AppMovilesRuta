@@ -27,11 +27,12 @@ import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialException
+import com.ggs.qosqoruta.features.auth.presentation.state.AuthUiState
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
-import com.ggs.qosqoruta.features.auth.presentation.state.AuthUiState
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
     viewModel: LoginViewModel,
@@ -40,7 +41,6 @@ fun LoginScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    // Herramientas
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val credentialManager = remember { CredentialManager.create(context) }
@@ -51,30 +51,145 @@ fun LoginScreen(
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
 
+    // Selector de Rol (Pasajero/Conductor)
+    var isDriver by remember { mutableStateOf(false) }
+
+    // Estados para el diálogo posterior si faltan datos de conductor
+    var showDriverDialog by remember { mutableStateOf(false) }
+    var driverDialogEmail by remember { mutableStateOf("") }
+    var selectedCompany by remember { mutableStateOf("Nuevo Mirador") }
+    var selectedRoute by remember { mutableStateOf("RTI-07") }
+    var expandedCompany by remember { mutableStateOf(false) }
+    var expandedRoute by remember { mutableStateOf(false) }
+
+    val companies = listOf("Nuevo Mirador", "Patrón San Jerónimo", "Saylla Huasao")
+    val routesMap = mapOf(
+        "Nuevo Mirador" to listOf("RTI-07"),
+        "Patrón San Jerónimo" to listOf("RTU-01"),
+        "Saylla Huasao" to listOf("RTI-01")
+    )
+    val currentRoutes = routesMap[selectedCompany] ?: emptyList()
+
     val isLoading = uiState is AuthUiState.Loading
 
-    // Navegación automática o manejo de errores del ViewModel
     LaunchedEffect(uiState) {
-        when (uiState) {
+        when (val state = uiState) {
             is AuthUiState.Success -> {
+                showDriverDialog = false
                 onLoginSuccess()
                 viewModel.resetState()
             }
+            is AuthUiState.NeedsDriverInfo -> {
+                driverDialogEmail = state.email
+                showDriverDialog = true
+            }
             is AuthUiState.Error -> {
-                snackbarHostState.showSnackbar((uiState as AuthUiState.Error).message)
+                snackbarHostState.showSnackbar(state.message)
                 viewModel.resetState()
             }
             else -> {}
         }
     }
 
-    val onLoginClick: (String, String) -> Unit = { inputEmail, inputPassword ->
-        if (inputEmail.isBlank() || inputPassword.isBlank()) {
+    val onLoginClick: () -> Unit = {
+        if (email.isBlank() || password.isBlank()) {
             coroutineScope.launch { snackbarHostState.showSnackbar("Por favor, ingresa correo y contraseña") }
         } else {
             focusManager.clearFocus()
-            viewModel.loginLocal(inputEmail, inputPassword)
+            viewModel.loginLocal(
+                email = email,
+                passwordRaw = password,
+                selectedRole = if (isDriver) "CONDUCTOR" else "PASAJERO"
+            )
         }
+    }
+
+    // Diálogo emergente solo si faltan datos de conductor tras el login
+    if (showDriverDialog) {
+        AlertDialog(
+            onDismissRequest = { /* Forzar selección */ },
+            title = { Text("Datos de Conductor") },
+            text = {
+                Column {
+                    Text("Iniciaste como Conductor. Para continuar, selecciona tu empresa y ruta de hoy:")
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    ExposedDropdownMenuBox(
+                        expanded = expandedCompany,
+                        onExpandedChange = { expandedCompany = !expandedCompany },
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = selectedCompany,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Empresa") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCompany) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = expandedCompany,
+                            onDismissRequest = { expandedCompany = false }
+                        ) {
+                            companies.forEach { companyOption ->
+                                DropdownMenuItem(
+                                    text = { Text(companyOption) },
+                                    onClick = {
+                                        selectedCompany = companyOption
+                                        selectedRoute = routesMap[companyOption]?.firstOrNull() ?: ""
+                                        expandedCompany = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    ExposedDropdownMenuBox(
+                        expanded = expandedRoute,
+                        onExpandedChange = { expandedRoute = !expandedRoute },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = selectedRoute,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Ruta") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedRoute) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = expandedRoute,
+                            onDismissRequest = { expandedRoute = false }
+                        ) {
+                            currentRoutes.forEach { routeOption ->
+                                DropdownMenuItem(
+                                    text = { Text(routeOption) },
+                                    onClick = {
+                                        selectedRoute = routeOption
+                                        expandedRoute = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (selectedCompany.isNotBlank() && selectedRoute.isNotBlank()) {
+                            viewModel.completeDriverInfo(
+                                email = driverDialogEmail,
+                                company = selectedCompany,
+                                route = selectedRoute
+                            )
+                        }
+                    }
+                ) {
+                    Text("Guardar y Continuar")
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -82,7 +197,7 @@ fun LoginScreen(
         modifier = Modifier
             .fillMaxSize()
             .systemBarsPadding()
-            .imePadding() // Regla #1: Ajuste perfecto al abrir teclado
+            .imePadding()
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -90,7 +205,6 @@ fun LoginScreen(
                 .padding(innerPadding),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Regla #4: LazyColumn para prevenir desbordamientos en pantallas pequeñas
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
@@ -116,8 +230,32 @@ fun LoginScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(bottom = 32.dp)
+                        modifier = Modifier.padding(bottom = 24.dp)
                     )
+                }
+
+                // Selector de Rol (SegmentedButton)
+                item {
+                    SingleChoiceSegmentedButtonRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp)
+                    ) {
+                        SegmentedButton(
+                            selected = !isDriver,
+                            onClick = { isDriver = false },
+                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
+                        ) {
+                            Text("Pasajero")
+                        }
+                        SegmentedButton(
+                            selected = isDriver,
+                            onClick = { isDriver = true },
+                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
+                        ) {
+                            Text("Conductor")
+                        }
+                    }
                 }
 
                 item {
@@ -126,7 +264,6 @@ fun LoginScreen(
                         onValueChange = { email = it },
                         label = { Text("Correo Electrónico") },
                         leadingIcon = { Icon(Icons.Filled.Email, contentDescription = null) },
-                        // Regla #2: Flujo del teclado
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Email,
                             imeAction = ImeAction.Next
@@ -157,13 +294,12 @@ fun LoginScreen(
                             }
                         },
                         visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        // Regla #2: ImeAction.Done para finalizar
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Password,
                             imeAction = ImeAction.Done
                         ),
                         keyboardActions = KeyboardActions(
-                            onDone = { onLoginClick(email, password) }
+                            onDone = { onLoginClick() }
                         ),
                         enabled = !isLoading,
                         singleLine = true,
@@ -178,7 +314,7 @@ fun LoginScreen(
                         CircularProgressIndicator(modifier = Modifier.padding(16.dp))
                     } else {
                         Button(
-                            onClick = { onLoginClick(email, password) },
+                            onClick = { onLoginClick() },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(50.dp)
@@ -204,12 +340,18 @@ fun LoginScreen(
                                         val result = credentialManager.getCredential(context, request)
                                         val credential = result.credential
 
-                                        // CredentialManager devuelve una CustomCredential. 
-                                        // Para Google ID, debemos verificar su tipo y luego convertirla.
                                         if (credential is CustomCredential &&
-                                            credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
-                                            val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
-                                            viewModel.handleGoogleLoginSuccess(googleIdTokenCredential.idToken)
+                                            credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+                                        ) {
+                                            val googleCred = GoogleIdTokenCredential.createFrom(credential.data)
+                                            val googleEmail = googleCred.id
+                                            val googleName = googleCred.displayName ?: googleCred.givenName ?: "Usuario Google"
+                                            
+                                            viewModel.handleGoogleLoginSuccess(
+                                                email = googleEmail,
+                                                displayName = googleName,
+                                                selectedRole = if (isDriver) "CONDUCTOR" else "PASAJERO"
+                                            )
                                         } else {
                                             viewModel.handleGoogleLoginError("Tipo de credencial no soportado")
                                         }
@@ -240,13 +382,16 @@ fun LoginScreen(
                 }
 
                 item {
-                    // Regla #5: El botón Admin llena los campos visualmente y dispara la validación
                     TextButton(
-                        onClick = { 
+                        onClick = {
                             focusManager.clearFocus()
                             email = "admin@qosqoruta.com"
                             password = "admin123"
-                            onLoginClick("admin@qosqoruta.com", "admin123") 
+                            viewModel.loginLocal(
+                                email = "admin@qosqoruta.com",
+                                passwordRaw = "admin123",
+                                selectedRole = if (isDriver) "CONDUCTOR" else "PASAJERO"
+                            )
                         },
                         enabled = !isLoading
                     ) {

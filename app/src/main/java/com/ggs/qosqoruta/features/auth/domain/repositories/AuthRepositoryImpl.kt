@@ -22,16 +22,13 @@ class AuthRepositoryImpl(
         routeName: String?
     ): AuthResult = withContext(Dispatchers.IO) {
         try {
-            // 1. Verificamos si el correo ya existe
             val existingUser = authDao.getUserByEmail(email)
             if (existingUser != null) {
                 return@withContext AuthResult.Error("El correo ya está registrado.")
             }
 
-            // 2. Hasheamos la contraseña de forma segura
             val hashedPassword = PasswordSecurity.hashPassword(passwordRaw)
 
-            // 3. Guardamos en Room
             val newUser = UserEntity(
                 name = name,
                 email = email,
@@ -55,11 +52,9 @@ class AuthRepositoryImpl(
         passwordRaw: String
     ): AuthResult = withContext(Dispatchers.IO) {
         try {
-            // 1. Buscamos al usuario por correo
             val user = authDao.getUserByEmail(email)
-                ?: return@withContext AuthResult.Error("Credenciales incorrectas.") // Ocultamos si el error es el correo o el pass por seguridad
+                ?: return@withContext AuthResult.Error("Credenciales incorrectas.")
 
-            // 2. Verificamos el hash
             val isPasswordValid = PasswordSecurity.verifyPassword(passwordRaw, user.passwordHash)
 
             if (isPasswordValid) {
@@ -74,6 +69,129 @@ class AuthRepositoryImpl(
             }
         } catch (e: Exception) {
             AuthResult.Error(e.localizedMessage ?: "Error al iniciar sesión")
+        }
+    }
+
+    override suspend fun getUserByEmail(email: String): UserEntity? = withContext(Dispatchers.IO) {
+        try {
+            authDao.getUserByEmail(email)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    override suspend fun loginOrRegisterGoogleUser(
+        email: String,
+        name: String,
+        role: String
+    ): AuthResult = withContext(Dispatchers.IO) {
+        try {
+            val existingUser = authDao.getUserByEmail(email)
+            if (existingUser != null) {
+                AuthResult.Success(
+                    name = existingUser.name,
+                    role = existingUser.role,
+                    company = existingUser.company,
+                    routeName = existingUser.routeName
+                )
+            } else {
+                val newGoogleUser = UserEntity(
+                    name = name,
+                    email = email,
+                    phone = "",
+                    passwordHash = "",
+                    role = role,
+                    company = null,
+                    routeName = null
+                )
+                authDao.insertUser(newGoogleUser)
+                AuthResult.Success(
+                    name = name,
+                    role = role,
+                    company = null,
+                    routeName = null
+                )
+            }
+        } catch (e: Exception) {
+            AuthResult.Error(e.localizedMessage ?: "Error al autenticar con Google")
+        }
+    }
+
+    override suspend fun updateDriverInfo(
+        email: String,
+        company: String,
+        routeName: String
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val existingUser = authDao.getUserByEmail(email)
+            if (existingUser != null) {
+                val updatedUser = existingUser.copy(
+                    role = "CONDUCTOR",
+                    company = company,
+                    routeName = routeName
+                )
+                authDao.updateUser(updatedUser)
+                true
+            } else {
+                val newUser = UserEntity(
+                    name = "Conductor",
+                    email = email,
+                    phone = "",
+                    passwordHash = "",
+                    role = "CONDUCTOR",
+                    company = company,
+                    routeName = routeName
+                )
+                authDao.insertUser(newUser)
+                true
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    override suspend fun updatePassword(
+        email: String,
+        oldPasswordRaw: String,
+        newPasswordRaw: String
+    ): AuthResult = withContext(Dispatchers.IO) {
+        try {
+            val user = authDao.getUserByEmail(email)
+                ?: return@withContext AuthResult.Error("Usuario no encontrado en la base de datos")
+
+            if (user.passwordHash.isNotBlank()) {
+                val isOldPasswordValid = PasswordSecurity.verifyPassword(oldPasswordRaw, user.passwordHash)
+                if (!isOldPasswordValid) {
+                    return@withContext AuthResult.Error("La contraseña actual es incorrecta")
+                }
+            }
+
+            val newHash = PasswordSecurity.hashPassword(newPasswordRaw)
+            val updatedUser = user.copy(passwordHash = newHash)
+            authDao.updateUser(updatedUser)
+
+            AuthResult.Success(name = user.name, role = user.role, company = user.company, routeName = user.routeName)
+        } catch (e: Exception) {
+            AuthResult.Error(e.localizedMessage ?: "Error al actualizar contraseña")
+        }
+    }
+
+    override suspend fun updateFullProfile(
+        email: String,
+        name: String,
+        phone: String
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val user = authDao.getUserByEmail(email)
+            if (user != null) {
+                val updatedUser = user.copy(name = name, phone = phone)
+                authDao.updateUser(updatedUser)
+                true
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            false
         }
     }
 }
