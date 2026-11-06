@@ -4,6 +4,13 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.ggs.qosqoruta.features.auth.domain.models.UserRole
 
+data class SearchHistoryItem(
+    val id: String,
+    val title: String,
+    val lineCode: String,
+    val timeAgoText: String
+)
+
 class SessionManager(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("qosqoruta_prefs", Context.MODE_PRIVATE)
 
@@ -15,8 +22,10 @@ class SessionManager(context: Context) {
         phone: String? = null,
         surname: String? = null,
         avatarId: Int = 0,
-        email: String? = null
+        email: String? = null,
+        avatarUri: String? = null
     ) {
+        val targetEmail = email ?: getUserEmail()
         prefs.edit().apply {
             putBoolean("is_logged_in", true)
             putString("user_name", name)
@@ -27,15 +36,18 @@ class SessionManager(context: Context) {
             putInt("avatar_id", avatarId)
             if (phone != null) putString("user_phone", phone)
             if (email != null) putString("user_email", email)
+            if (avatarUri != null) putString("user_avatar_uri_$targetEmail", avatarUri)
         }.apply()
     }
 
-    fun updateFullProfile(name: String, surname: String, phone: String, avatarId: Int) {
+    fun updateFullProfile(name: String, surname: String, phone: String, avatarId: Int, avatarUri: String? = null) {
+        val emailKey = getUserEmail().ifBlank { "guest_user" }
         prefs.edit().apply {
             putString("user_name", name)
             putString("user_surname", surname)
             putString("user_phone", phone)
             putInt("avatar_id", avatarId)
+            if (avatarUri != null) putString("user_avatar_uri_$emailKey", avatarUri)
         }.apply()
     }
 
@@ -88,6 +100,23 @@ class SessionManager(context: Context) {
     fun getDriverCompany(): String = prefs.getString("driver_company", "") ?: ""
     fun getDriverRoute(): String = prefs.getString("driver_route", "") ?: ""
 
+    // PERSISTENCIA DE URI FOTO DE PERFIL (GALERÍA O FOTO DE GOOGLE)
+    fun getAvatarUri(): String? {
+        val emailKey = getUserEmail().ifBlank { "guest_user" }
+        return prefs.getString("user_avatar_uri_$emailKey", null)
+    }
+
+    fun setAvatarUri(uriString: String?) {
+        val emailKey = getUserEmail().ifBlank { "guest_user" }
+        prefs.edit().apply {
+            if (uriString != null) {
+                putString("user_avatar_uri_$emailKey", uriString)
+            } else {
+                remove("user_avatar_uri_$emailKey")
+            }
+        }.apply()
+    }
+
     // PERSISTENCIA DE FAVORITOS ÚNICA Y PRIVADA POR CADA USUARIO (EMAIL)
     fun getFavoriteBusIds(): Set<String> {
         val emailKey = getUserEmail().ifBlank { "guest_user" }
@@ -112,5 +141,49 @@ class SessionManager(context: Context) {
         current.remove(busId)
         prefs.edit().putStringSet("fav_buses_$emailKey", current).apply()
         return current
+    }
+
+    // PERSISTENCIA DE HISTORIAL DE BÚSQUEDAS
+    fun getSearchHistory(): List<SearchHistoryItem> {
+        val emailKey = getUserEmail().ifBlank { "guest_user" }
+        val rawSet = prefs.getStringSet("search_history_$emailKey", null)
+        if (rawSet == null || rawSet.isEmpty()) {
+            return listOf(
+                SearchHistoryItem("H1", "Plaza de Armas ➔ Paradero Final", "Línea: RTI-07", "Hace 9 minutos"),
+                SearchHistoryItem("H2", "UNSAAC ➔ Mercado San Pedro", "Línea: RTU-01", "Hace 25 minutos")
+            )
+        }
+        return rawSet.mapNotNull { itemStr ->
+            val parts = itemStr.split("|||")
+            if (parts.size >= 4) {
+                SearchHistoryItem(parts[0], parts[1], parts[2], parts[3])
+            } else null
+        }
+    }
+
+    fun addSearchHistory(title: String, lineCode: String) {
+        val emailKey = getUserEmail().ifBlank { "guest_user" }
+        val current = getSearchHistory().toMutableList()
+        val newItem = SearchHistoryItem(
+            id = System.currentTimeMillis().toString(),
+            title = title,
+            lineCode = lineCode,
+            timeAgoText = "Hace un momento"
+        )
+        current.add(0, newItem)
+        val serializedSet = current.take(10).map { "${it.id}|||${it.title}|||${it.lineCode}|||${it.timeAgoText}" }.toSet()
+        prefs.edit().putStringSet("search_history_$emailKey", serializedSet).apply()
+    }
+
+    fun removeSearchHistoryItem(id: String) {
+        val emailKey = getUserEmail().ifBlank { "guest_user" }
+        val current = getSearchHistory().filterNot { it.id == id }
+        val serializedSet = current.map { "${it.id}|||${it.title}|||${it.lineCode}|||${it.timeAgoText}" }.toSet()
+        prefs.edit().putStringSet("search_history_$emailKey", serializedSet).apply()
+    }
+
+    fun clearSearchHistory() {
+        val emailKey = getUserEmail().ifBlank { "guest_user" }
+        prefs.edit().remove("search_history_$emailKey").apply()
     }
 }

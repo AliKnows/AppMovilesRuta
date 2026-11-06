@@ -83,8 +83,13 @@ class LoginViewModel(
         }
     }
 
-    // 2. LOGIN GOOGLE
-    fun handleGoogleLoginSuccess(email: String, displayName: String, selectedRole: String) {
+    // 2. LOGIN GOOGLE (CON SOPORTE PARA RECUPERAR FOTO DE PERFIL DE GOOGLE)
+    fun handleGoogleLoginSuccess(
+        email: String,
+        displayName: String,
+        selectedRole: String,
+        avatarUri: String? = null
+    ) {
         _uiState.value = AuthUiState.Loading
         viewModelScope.launch {
             val result = repository.loginOrRegisterGoogleUser(email, displayName, selectedRole)
@@ -106,7 +111,8 @@ class LoginViewModel(
                                 role = "CONDUCTOR",
                                 company = result.company,
                                 route = result.routeName,
-                                email = email
+                                email = email,
+                                avatarUri = avatarUri
                             )
                             _uiState.value = AuthUiState.Success
                         }
@@ -116,7 +122,8 @@ class LoginViewModel(
                             role = "PASAJERO",
                             company = null,
                             route = null,
-                            email = email
+                            email = email,
+                            avatarUri = avatarUri
                         )
                         _uiState.value = AuthUiState.Success
                     }

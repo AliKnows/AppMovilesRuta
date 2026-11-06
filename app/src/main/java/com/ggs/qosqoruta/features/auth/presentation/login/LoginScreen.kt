@@ -1,5 +1,6 @@
 package com.ggs.qosqoruta.features.auth.presentation.login
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardActions
@@ -7,7 +8,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.*
@@ -15,8 +15,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -27,6 +29,7 @@ import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialException
+import com.ggs.qosqoruta.R
 import com.ggs.qosqoruta.features.auth.presentation.state.AuthUiState
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
@@ -104,10 +107,9 @@ fun LoginScreen(
         }
     }
 
-    // Diálogo emergente solo si faltan datos de conductor tras el login
     if (showDriverDialog) {
         AlertDialog(
-            onDismissRequest = { /* Forzar selección */ },
+            onDismissRequest = { },
             title = { Text("Datos de Conductor") },
             text = {
                 Column {
@@ -214,6 +216,15 @@ fun LoginScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 item {
+                    Image(
+                        painter = painterResource(id = R.drawable.ic_logo_qosqoruta),
+                        contentDescription = "Logo QosQoRuta",
+                        modifier = Modifier
+                            .size(110.dp)
+                            .padding(bottom = 12.dp)
+                    )
+                }
+                item {
                     Text(
                         text = "QosQoRuta",
                         style = MaterialTheme.typography.displaySmall,
@@ -234,7 +245,6 @@ fun LoginScreen(
                     )
                 }
 
-                // Selector de Rol (SegmentedButton)
                 item {
                     SingleChoiceSegmentedButtonRow(
                         modifier = Modifier
@@ -346,11 +356,13 @@ fun LoginScreen(
                                             val googleCred = GoogleIdTokenCredential.createFrom(credential.data)
                                             val googleEmail = googleCred.id
                                             val googleName = googleCred.displayName ?: googleCred.givenName ?: "Usuario Google"
+                                            val googlePhotoUri = googleCred.profilePictureUri?.toString()
                                             
                                             viewModel.handleGoogleLoginSuccess(
                                                 email = googleEmail,
                                                 displayName = googleName,
-                                                selectedRole = if (isDriver) "CONDUCTOR" else "PASAJERO"
+                                                selectedRole = if (isDriver) "CONDUCTOR" else "PASAJERO",
+                                                avatarUri = googlePhotoUri
                                             )
                                         } else {
                                             viewModel.handleGoogleLoginError("Tipo de credencial no soportado")
@@ -364,7 +376,12 @@ fun LoginScreen(
                                 .fillMaxWidth()
                                 .height(50.dp)
                         ) {
-                            Icon(Icons.Filled.Person, contentDescription = null)
+                            Icon(
+                                painter = painterResource(id = R.drawable.ic_google),
+                                contentDescription = "Logo de Google",
+                                modifier = Modifier.size(24.dp),
+                                tint = Color.Unspecified
+                            )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Continuar con Google", maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }

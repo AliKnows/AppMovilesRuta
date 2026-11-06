@@ -20,8 +20,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.ggs.qosqoruta.core.preferences.SessionManager
 import com.ggs.qosqoruta.features.mapa.data.cuscoRutasList
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -30,6 +32,8 @@ fun RutasBottomSheetContent(
     selectedRouteTag: String,
     onSelectRoute: (String) -> Unit
 ) {
+    val context = LocalContext.current
+    val sessionManager = remember { SessionManager(context) }
     var expandedRouteCode by remember { mutableStateOf<String?>("RTI-07") }
 
     Column(
@@ -68,6 +72,7 @@ fun RutasBottomSheetContent(
                     .fillMaxWidth()
                     .animateContentSize(animationSpec = spring(stiffness = Spring.StiffnessLow))
                     .clickable {
+                        sessionManager.addSearchHistory(ruta.itinerary, "Línea: ${ruta.code}")
                         onSelectRoute(ruta.code)
                         expandedRouteCode = if (isExpanded) null else ruta.code
                     },

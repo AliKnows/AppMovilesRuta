@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.ggs.qosqoruta.core.preferences.SessionManager
 import com.ggs.qosqoruta.features.mapa.data.cuscoParaderosReales
 import com.ggs.qosqoruta.features.mapa.data.cuscoRutasList
 import com.ggs.qosqoruta.features.mapa.domain.models.BusInfo
@@ -47,6 +48,8 @@ fun ExplorarBottomSheetContent(
     onViewStopOnMap: (Paradero) -> Unit = {}
 ) {
     val context = LocalContext.current
+    val sessionManager = remember { SessionManager(context) }
+
     var localSearchQuery by remember { mutableStateOf("") }
     val effectiveSearchQuery = externalSearchQuery.ifBlank { localSearchQuery }
     var expandedRouteCode by remember { mutableStateOf<String?>("RTI-07") }
@@ -248,13 +251,20 @@ fun ExplorarBottomSheetContent(
 
                                 Spacer(modifier = Modifier.height(12.dp))
 
+                                // REQUERIMIENTO: SOLO REGISTRA HISTORIAL CUANDO EL USUARIO SELECCIONA LA RUTA/PARADERO BUSCADO
                                 closestBusForStop?.let { bus ->
                                     Surface(
                                         color = MaterialTheme.colorScheme.surface,
                                         shape = RoundedCornerShape(12.dp),
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clickable { onFollowBusClick(bus) }
+                                            .clickable {
+                                                sessionManager.addSearchHistory(
+                                                    title = "${paradero.name} ➔ ${bus.name}",
+                                                    lineCode = "Línea: ${bus.tag}"
+                                                )
+                                                onFollowBusClick(bus)
+                                            }
                                     ) {
                                         Row(
                                             modifier = Modifier.padding(10.dp),
@@ -280,6 +290,10 @@ fun ExplorarBottomSheetContent(
                                 ) {
                                     OutlinedButton(
                                         onClick = {
+                                            sessionManager.addSearchHistory(
+                                                title = "Consulta: ${paradero.name}",
+                                                lineCode = paradero.snippet
+                                            )
                                             onViewStopOnMap(paradero)
                                             closestBusForStop?.let { onBusSelected(it) }
                                         },
@@ -293,6 +307,10 @@ fun ExplorarBottomSheetContent(
 
                                     Button(
                                         onClick = {
+                                            sessionManager.addSearchHistory(
+                                                title = "Guiado a Paradero ${paradero.name}",
+                                                lineCode = paradero.snippet
+                                            )
                                             val lat = paradero.location.latitude
                                             val lng = paradero.location.longitude
                                             val gmmIntentUri = Uri.parse("google.navigation:q=$lat,$lng&mode=w")
@@ -378,7 +396,13 @@ fun ExplorarBottomSheetContent(
                                                 bus = bus,
                                                 isExpanded = bus.id == activeBus.id,
                                                 onClick = { onBusSelected(bus) },
-                                                onFollowClick = { onFollowBusClick(bus) },
+                                                onFollowClick = {
+                                                    sessionManager.addSearchHistory(
+                                                        title = "${bus.name} ➔ ${bus.route}",
+                                                        lineCode = "Línea: ${bus.tag}"
+                                                    )
+                                                    onFollowBusClick(bus)
+                                                },
                                                 onToggleFavorite = { onToggleFavorite(bus.id) }
                                             )
                                         }

@@ -20,10 +20,13 @@ import androidx.navigation.compose.rememberNavController
 import com.ggs.qosqoruta.core.preferences.SessionManager
 import com.ggs.qosqoruta.features.auth.domain.models.UserRole
 import com.ggs.qosqoruta.features.mapa.presentation.components.PantallaEnConstruccion
+import com.ggs.qosqoruta.features.mapa.presentation.components.ProfileAvatarImage
 import com.ggs.qosqoruta.features.mapa.presentation.configuracion.ConfiguracionScreen
 import com.ggs.qosqoruta.features.mapa.presentation.mapa.MapaScreen
 import com.ggs.qosqoruta.features.mapa.presentation.navigation.Rutas
+import com.ggs.qosqoruta.features.mapa.presentation.screens.HistorialRutasScreen
 import com.ggs.qosqoruta.features.mapa.presentation.screens.LineasEmpresasScreen
+import com.ggs.qosqoruta.features.mapa.presentation.screens.ModoOfflineScreen
 import com.ggs.qosqoruta.features.mapa.presentation.screens.ParaderosCercanosScreen
 import com.ggs.qosqoruta.features.mapa.presentation.screens.TarifasScreen
 import kotlinx.coroutines.launch
@@ -45,24 +48,12 @@ fun HomeScreen(
         drawerContent = {
             ModalDrawerSheet {
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 24.dp)) {
-                    Surface(
-                        shape = CircleShape,
-                        color = when (sessionManager.getAvatarId()) {
-                            1 -> MaterialTheme.colorScheme.secondaryContainer
-                            2 -> MaterialTheme.colorScheme.tertiaryContainer
-                            else -> MaterialTheme.colorScheme.primaryContainer
-                        },
-                        modifier = Modifier.size(60.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Filled.Person,
-                                contentDescription = null,
-                                modifier = Modifier.size(36.dp),
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
-                    }
+                    ProfileAvatarImage(
+                        avatarUri = sessionManager.getAvatarUri(),
+                        avatarId = sessionManager.getAvatarId(),
+                        modifier = Modifier.size(60.dp),
+                        iconSize = 36.dp
+                    )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         text = sessionManager.getFullName(),
@@ -182,9 +173,42 @@ fun HomeScreen(
                     onThemeChanged = onThemeChanged
                 )
             }
+            composable(Rutas.Historial.route) {
+                HistorialRutasScreen(
+                    onOpenMenu = { scope.launch { drawerState.open() } },
+                    isDarkMode = isDarkMode,
+                    onThemeChanged = onThemeChanged,
+                    onNavigateToMap = {
+                        navController.navigate(Rutas.MapaPrincipal.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
+            }
+            composable(Rutas.Offline.route) {
+                ModoOfflineScreen(
+                    onOpenMenu = { scope.launch { drawerState.open() } },
+                    isDarkMode = isDarkMode,
+                    onThemeChanged = onThemeChanged,
+                    onNavigateToLineas = { navController.navigate(Rutas.LineasEmpresas.route) },
+                    onNavigateToParaderos = { navController.navigate(Rutas.Paraderos.route) },
+                    onNavigateToTarifas = { navController.navigate(Rutas.Tarifas.route) },
+                    onNavigateToMap = {
+                        navController.navigate(Rutas.MapaPrincipal.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
+            }
             composable(Rutas.ModoPasajero.route) { PantallaEnConstruccion("Modo Pasajero", onOpenMenu = { scope.launch { drawerState.open() } }, isDarkMode = isDarkMode, onThemeChanged = onThemeChanged) }
-            composable(Rutas.Historial.route) { PantallaEnConstruccion("Historial de Rutas", onOpenMenu = { scope.launch { drawerState.open() } }, isDarkMode = isDarkMode, onThemeChanged = onThemeChanged) }
-            composable(Rutas.Offline.route) { PantallaEnConstruccion("Modo Offline", onOpenMenu = { scope.launch { drawerState.open() } }, isDarkMode = isDarkMode, onThemeChanged = onThemeChanged) }
         }
     }
 }

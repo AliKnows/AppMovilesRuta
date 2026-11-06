@@ -1,5 +1,10 @@
 package com.ggs.qosqoruta.features.mapa.presentation.configuracion
 
+import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -21,6 +26,7 @@ import com.ggs.qosqoruta.core.database.QosQoRutaDatabase
 import com.ggs.qosqoruta.core.preferences.SessionManager
 import com.ggs.qosqoruta.core.security.PasswordSecurity
 import com.ggs.qosqoruta.features.auth.domain.models.UserRole
+import com.ggs.qosqoruta.features.mapa.presentation.components.ProfileAvatarImage
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -43,13 +49,34 @@ fun ConfiguracionScreen(
     var surnameInput by remember { mutableStateOf(sessionManager.getUserSurname()) }
     var phoneInput by remember { mutableStateOf(sessionManager.getUserPhone()) }
     var avatarId by remember { mutableIntStateOf(sessionManager.getAvatarId()) }
+    var userAvatarUri by remember { mutableStateOf(sessionManager.getAvatarUri()) }
+
+    var showAvatarDialog by remember { mutableStateOf(false) }
+
+    // SELECCIONADOR DE FOTO DE LA GALERÍA DEL TELÉFONO
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            val uriStr = uri.toString()
+            userAvatarUri = uriStr
+            sessionManager.setAvatarUri(uriStr)
+            showAvatarDialog = false
+        }
+    }
 
     var showPasswordSection by remember { mutableStateOf(false) }
     var oldPassword by remember { mutableStateOf("") }
     var newPassword by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
-
-    var showAvatarDialog by remember { mutableStateOf(false) }
 
     var notificacionesPush by remember { mutableStateOf(true) }
     var showDriverDialog by remember { mutableStateOf(false) }
@@ -70,30 +97,58 @@ fun ConfiguracionScreen(
     if (showAvatarDialog) {
         AlertDialog(
             onDismissRequest = { showAvatarDialog = false },
-            title = { Text("Seleccionar Avatar de Perfil") },
+            title = { Text("Cambiar Foto de Perfil") },
             text = {
-                Row(
+                Column(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    val avatarColors = listOf(
-                        MaterialTheme.colorScheme.primaryContainer to "Estándar",
-                        MaterialTheme.colorScheme.secondaryContainer to "Conductor",
-                        MaterialTheme.colorScheme.tertiaryContainer to "Pasajero"
-                    )
-                    avatarColors.forEachIndexed { index, (containerColor, label) ->
-                        Surface(
-                            shape = CircleShape,
-                            color = containerColor,
-                            modifier = Modifier
-                                .size(64.dp)
-                                .clickable {
-                                    avatarId = index
-                                    showAvatarDialog = false
+                    Button(
+                        onClick = {
+                            photoPickerLauncher.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Icon(Icons.Filled.PhotoLibrary, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("📁 Subir Foto de la Galería")
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text("O selecciona un avatar predefinido:", style = MaterialTheme.typography.labelMedium)
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        val avatarColors = listOf(
+                            MaterialTheme.colorScheme.primaryContainer to "Estándar",
+                            MaterialTheme.colorScheme.secondaryContainer to "Conductor",
+                            MaterialTheme.colorScheme.tertiaryContainer to "Pasajero"
+                        )
+                        avatarColors.forEachIndexed { index, (containerColor, label) ->
+                            Surface(
+                                shape = CircleShape,
+                                color = containerColor,
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .clickable {
+                                        avatarId = index
+                                        userAvatarUri = null
+                                        sessionManager.setAvatarUri(null)
+                                        showAvatarDialog = false
+                                    }
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Filled.Person, contentDescription = label, modifier = Modifier.size(32.dp))
                                 }
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(Icons.Filled.Person, contentDescription = label, modifier = Modifier.size(36.dp))
                             }
                         }
                     }
@@ -222,24 +277,14 @@ fun ConfiguracionScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(contentAlignment = Alignment.BottomEnd) {
-                    Surface(
-                        shape = CircleShape,
-                        color = when (avatarId) {
-                            1 -> MaterialTheme.colorScheme.secondaryContainer
-                            2 -> MaterialTheme.colorScheme.tertiaryContainer
-                            else -> MaterialTheme.colorScheme.primaryContainer
-                        },
-                        modifier = Modifier.size(72.dp).clickable { showAvatarDialog = true }
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                Icons.Filled.Person,
-                                contentDescription = null,
-                                modifier = Modifier.size(44.dp),
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
-                    }
+                    ProfileAvatarImage(
+                        avatarUri = userAvatarUri,
+                        avatarId = avatarId,
+                        modifier = Modifier
+                            .size(72.dp)
+                            .clickable { showAvatarDialog = true },
+                        iconSize = 44.dp
+                    )
                     SmallFloatingActionButton(
                         onClick = { showAvatarDialog = true },
                         modifier = Modifier.size(26.dp),
@@ -378,7 +423,7 @@ fun ConfiguracionScreen(
                             }
                         }
 
-                        sessionManager.updateFullProfile(nameInput, surnameInput, phoneInput, avatarId)
+                        sessionManager.updateFullProfile(nameInput, surnameInput, phoneInput, avatarId, userAvatarUri)
                         snackbarHostState.showSnackbar("¡Perfil guardado con éxito!")
                         oldPassword = ""
                         newPassword = ""
