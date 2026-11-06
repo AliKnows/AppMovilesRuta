@@ -1,0 +1,65 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="100dp"
+    android:height="100dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+
+    <!-- Círculo exterior (Azul oscuro) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#0D47A1"
+        android:strokeWidth="4"
+        android:pathData="M 50,50 m -45,0 a 45,45 0 1,1 90,0 a 45,45 0 1,1 -90,0" />
+
+    <!-- Montaña Naranja (Fondo) -->
+    <path
+        android:fillColor="#FF5722"
+        android:pathData="M 5,65 L 30,25 L 50,45 L 75,15 L 95,65 Z" />
+
+    <!-- Montaña Amarilla/Dorada (Fondo) -->
+    <path
+        android:fillColor="#FFCA28"
+        android:pathData="M 15,65 L 40,35 L 60,55 L 85,25 L 95,65 Z" />
+
+    <!-- Pin de Ubicación (Azul y Naranja) -->
+    <path
+        android:fillColor="#0D47A1"
+        android:pathData="M 50,5 c -6.6,0 -12,5.4 -12,12 c 0,9 12,18 12,18 c 0,0 12,-9 12,-18 c 0,-6.6 -5.4,-12 -12,-12 z" />
+    <path
+        android:fillColor="#FF5722"
+        android:pathData="M 50,17 m -4,0 a 4,4 0 1,1 8,0 a 4,4 0 1,1 -8,0" />
+
+    <!-- Cuerpo del Bus (Azul oscuro) -->
+    <path
+        android:fillColor="#0D47A1"
+        android:pathData="M 30,45 h 40 c 2.7,0 5,2.2 5,5 v 30 c 0,2.7 -2.2,5 -5,5 h -40 c -2.7,0 -5,-2.2 -5,-5 v -30 c 0,-2.7 2.2,-5 5,-5 z" />
+
+    <!-- Parabrisas (Blanco) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 35,52 h 30 v 12 h -30 z" />
+
+    <!-- Faros delanteros (Blancos) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 38,75 m -3,0 a 3,3 0 1,1 6,0 a 3,3 0 1,1 -6,0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 62,75 m -3,0 a 3,3 0 1,1 6,0 a 3,3 0 1,1 -6,0" />
+
+    <!-- Parrilla frontal (Naranja) -->
+    <path
+        android:fillColor="#FF5722"
+        android:pathData="M 45,71 h 10 v 2 h -10 z" />
+    <path
+        android:fillColor="#FF5722"
+        android:pathData="M 45,75 h 10 v 2 h -10 z" />
+
+    <!-- Llantas (Gris Oscuro) -->
+    <path
+        android:fillColor="#212121"
+        android:pathData="M 32,85 h 8 v 8 h -8 z" />
+    <path
+        android:fillColor="#212121"
+        android:pathData="M 60,85 h 8 v 8 h -8 z" />
+</vector>
