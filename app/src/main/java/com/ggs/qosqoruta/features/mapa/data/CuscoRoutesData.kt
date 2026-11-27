@@ -160,6 +160,67 @@ val losLeonesPolyline = listOf(
     LatLng(-13.513010, -71.982020)
 )
 
+data class RutaMapaConfig(
+    val code: String,
+    val displayName: String,
+    val color: Color,
+    val darkModeColor: Color,
+    val polyline: List<LatLng>,
+    val stopSnippet: String,
+    val busTags: Set<String>,
+    val routeCodes: Set<String> = setOf(code)
+)
+
+val cuscoRutasMapa = listOf(
+    RutaMapaConfig(
+        code = "RTI-07",
+        displayName = "Mirador",
+        color = Color(0xFF00875A),
+        darkModeColor = Color(0xFF50D6A4),
+        polyline = rti07NuevoMiradorPolyline,
+        stopSnippet = "RTI-07",
+        busTags = setOf("RTI-07", "RT-04"),
+        routeCodes = setOf("RTI-07", "RT-04")
+    ),
+    RutaMapaConfig(
+        code = "RTU-01",
+        displayName = "San Jerónimo",
+        color = Color(0xFF6750A4),
+        darkModeColor = Color(0xFFB69CFF),
+        polyline = rtu01PatronPolyline,
+        stopSnippet = "RTU-01",
+        busTags = setOf("RTU-01", "C4-M"),
+        routeCodes = setOf("RTU-01", "C4-M")
+    ),
+    RutaMapaConfig(
+        code = "RTI-01",
+        displayName = "Valle Sur",
+        color = Color(0xFF2864DC),
+        darkModeColor = Color(0xFF82B1FF),
+        polyline = rti01SayllaHuasaoPolyline,
+        stopSnippet = "RTI-01",
+        busTags = setOf("RTI-01", "R-21"),
+        routeCodes = setOf("RTI-01", "R-21")
+    ),
+    RutaMapaConfig(
+        code = "LEONES",
+        displayName = "Los Leones",
+        color = Color(0xFFB25E00),
+        darkModeColor = Color(0xFFFFB74D),
+        polyline = losLeonesPolyline,
+        stopSnippet = "Los Leones",
+        busTags = setOf("LEONES", "LOS LEONES")
+    )
+)
+
+fun rutaMapaConfig(code: String): RutaMapaConfig =
+    cuscoRutasMapa.firstOrNull { config ->
+        config.routeCodes.any { it.equals(code, ignoreCase = true) }
+    } ?: cuscoRutasMapa.first()
+
+fun RutaMapaConfig.uiColor(isDarkMode: Boolean): Color =
+    if (isDarkMode) darkModeColor else color
+
 // ---------------------------------------------------------
 // RUTAS Y BUSES DETALLADOS EN CUSCO
 // ---------------------------------------------------------
@@ -202,7 +263,7 @@ val cuscoRutasList = listOf(
         description = "Penetración Centro Histórico desde Colegio Don Bosco (Saphi), Plaza San Francisco, Limacpampa hasta la Plaza de Tipón.",
         price = "S/. 1.50",
         frequency = "Cada 10 min",
-        activeBusesCount = 1
+        activeBusesCount = 2
     )
 )
 

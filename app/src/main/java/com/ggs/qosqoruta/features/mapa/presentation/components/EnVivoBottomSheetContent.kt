@@ -12,6 +12,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -23,23 +25,21 @@ import java.util.Locale
 @Composable
 fun EnVivoBottomSheetContent(
     activeBus: BusInfo,
+    routeColor: Color,
     onStopFollowingClick: () -> Unit
 ) {
     val context = LocalContext.current
 
-    // Tiempo y estado del recorrido en tiempo real
-    var simulatedEtaMinutes by remember { mutableIntStateOf(3) }
     var currentStepIndex by remember { mutableIntStateOf(1) } // 0 = En camino, 1 = Próximo paradero, 2 = En tu paradero
 
-    // Cálculo dinámico del reloj de llegada (Ej: 10:11 am)
-    val arrivalClockTime = remember(simulatedEtaMinutes) {
+    val etaMinutes = activeBus.etaMinutes.coerceAtLeast(1)
+    val arrivalClockTime = remember(etaMinutes) {
         val calendar = Calendar.getInstance()
-        calendar.add(Calendar.MINUTE, simulatedEtaMinutes)
+        calendar.add(Calendar.MINUTE, etaMinutes)
         SimpleDateFormat("hh:mm a", Locale.getDefault()).format(calendar.time)
     }
 
     LaunchedEffect(activeBus.id) {
-        simulatedEtaMinutes = 3
         currentStepIndex = 1
     }
 
@@ -50,12 +50,15 @@ fun EnVivoBottomSheetContent(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 1. BANNER EN VIVO CON RELOJ DE LLEGADA (ESTILO UBER / GOOGLE MAPS)
+        // 1. RESUMEN DE LA UNIDAD Y SU ETA
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+            colors = CardDefaults.cardColors(
+                containerColor = lerp(MaterialTheme.colorScheme.surface, routeColor, 0.12f)
+            ),
             shape = RoundedCornerShape(20.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, routeColor.copy(alpha = 0.28f))
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(
@@ -66,15 +69,15 @@ fun EnVivoBottomSheetContent(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Surface(
                             shape = CircleShape,
-                            color = MaterialTheme.colorScheme.error,
+                            color = routeColor,
                             modifier = Modifier.size(10.dp)
                         ) {}
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "TRANSMISIÓN EN VIVO",
+                            text = if (activeBus.isDemo) "DEMO · SIMULACIÓN LOCAL" else "TRANSMISIÓN EN VIVO",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.error
+                            color = routeColor
                         )
                     }
 
@@ -97,7 +100,7 @@ fun EnVivoBottomSheetContent(
                                 text = arrivalClockTime,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
+                                color = routeColor
                             )
                         }
                     }
@@ -109,13 +112,47 @@ fun EnVivoBottomSheetContent(
                     text = activeBus.name,
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = "${activeBus.tag} • ${activeBus.route}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Surface(
+                    color = routeColor.copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = etaMinutes.toString(),
+                            style = MaterialTheme.typography.displaySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = routeColor
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "min • ETA",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Próximo paradero: ${activeBus.nextStopName}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(10.dp))
 
@@ -132,19 +169,19 @@ fun EnVivoBottomSheetContent(
                         Icon(
                             imageVector = Icons.Filled.NorthEast,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
+                            tint = routeColor,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             Text(
-                                text = "Sentido de Marcha: SUBIDA",
+                                text = "Rumbo ${activeBus.bearingDegrees.toInt()}°",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
+                                color = routeColor
                             )
                             Text(
-                                text = "🟢 Dirigiéndose hacia tu parada (Aún no se ha pasado)",
+                                text = "Siguiente parada: ${activeBus.nextStopName}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
@@ -173,13 +210,13 @@ fun EnVivoBottomSheetContent(
                     Icon(
                         imageVector = Icons.Filled.CheckCircle,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = routeColor,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text("Ubicación del Conductor: En tránsito", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                        Text("Transitando por Av. de la Cultura", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("En ruta ${activeBus.tag}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
 
@@ -190,13 +227,13 @@ fun EnVivoBottomSheetContent(
                     Icon(
                         imageVector = if (currentStepIndex >= 1) Icons.Filled.RadioButtonChecked else Icons.Filled.RadioButtonUnchecked,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = routeColor,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text("Siguiente Parada del Bus: Garcilaso", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                        Text("A 350 metros de tu punto de abordaje", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Siguiente Parada: ${activeBus.nextStopName}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        Text(activeBus.distance, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
 
@@ -207,13 +244,13 @@ fun EnVivoBottomSheetContent(
                     Icon(
                         imageVector = if (currentStepIndex >= 2) Icons.Filled.Place else Icons.Filled.RadioButtonUnchecked,
                         contentDescription = null,
-                        tint = if (currentStepIndex >= 2) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = if (currentStepIndex >= 2) routeColor else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text("Tu Paradero Cercano: Manuel Prado", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                        Text("Punto de abordaje (Llegada a las $arrivalClockTime)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                        Text("Tu Paradero Cercano: ${activeBus.nextStopName}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = routeColor)
+                        Text("Punto de abordaje (Llegada a las $arrivalClockTime)", style = MaterialTheme.typography.bodySmall, color = routeColor, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -256,31 +293,45 @@ fun EnVivoBottomSheetContent(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Icon(
-                                    imageVector = Icons.Filled.Verified,
-                                    contentDescription = "Conductor Verificado",
-                                    tint = MaterialTheme.colorScheme.primary,
+                                    imageVector = if (activeBus.isDemo) {
+                                        Icons.Filled.DirectionsBus
+                                    } else {
+                                        Icons.Filled.Verified
+                                    },
+                                    contentDescription = if (activeBus.isDemo) {
+                                        "Unidad de demostración"
+                                    } else {
+                                        "Conductor Verificado"
+                                    },
+                                    tint = routeColor,
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
                             Text(
-                                text = "Conductor Verificado QosQoRuta",
+                                text = if (activeBus.isDemo) {
+                                    "Unidad de demostración local"
+                                } else {
+                                    "Conductor Verificado QosQoRuta"
+                                },
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary
+                                color = routeColor
                             )
                         }
                     }
 
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                    if (!activeBus.isDemo) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            shape = RoundedCornerShape(12.dp)
                         ) {
-                            Icon(Icons.Filled.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("4.9", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Filled.Star, contentDescription = null, tint = routeColor, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("4.9", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
@@ -301,7 +352,7 @@ fun EnVivoBottomSheetContent(
                     }
                     Column {
                         Text("Frecuencia", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(activeBus.frequency, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Text(activeBus.frequency, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = routeColor)
                     }
                 }
 
@@ -312,16 +363,22 @@ fun EnVivoBottomSheetContent(
                     onClick = {
                         val shareIntent = Intent(Intent.ACTION_SEND).apply {
                             type = "text/plain"
-                            putExtra(Intent.EXTRA_TEXT, "Sigue mi bus en vivo (${activeBus.name} - ${activeBus.tag}) en QosQoRuta Cusco: Llegando a mi paradero a las $arrivalClockTime.")
+                            val message = if (activeBus.isDemo) {
+                                "Simulación local de ${activeBus.name} (${activeBus.tag}) en QosQoRuta: ETA de ${activeBus.etaMinutes} min."
+                            } else {
+                                "Sigue mi bus en vivo (${activeBus.name} - ${activeBus.tag}) en QosQoRuta Cusco: Llegando a mi paradero a las $arrivalClockTime."
+                            }
+                            putExtra(Intent.EXTRA_TEXT, message)
                         }
                         context.startActivity(Intent.createChooser(shareIntent, "Compartir Viaje en Vivo"))
                     },
                     modifier = Modifier.fillMaxWidth().height(44.dp),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = routeColor)
                 ) {
                     Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Compartir Ubicación del Viaje en Vivo")
+                    Text(if (activeBus.isDemo) "Compartir ETA de demostración" else "Compartir Ubicación del Viaje en Vivo")
                 }
             }
         }

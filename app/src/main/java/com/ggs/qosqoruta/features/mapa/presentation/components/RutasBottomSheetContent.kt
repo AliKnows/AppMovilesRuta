@@ -19,17 +19,25 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.ggs.qosqoruta.core.preferences.SessionManager
 import com.ggs.qosqoruta.features.mapa.data.cuscoRutasList
+import com.ggs.qosqoruta.features.mapa.data.rutaMapaConfig
+import com.ggs.qosqoruta.features.mapa.data.uiColor
+import com.ggs.qosqoruta.features.mapa.domain.models.BusInfo
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RutasBottomSheetContent(
     selectedRouteTag: String,
+    isDarkMode: Boolean,
+    buses: List<BusInfo>,
+    onBusSelected: (BusInfo) -> Unit,
     onSelectRoute: (String) -> Unit
 ) {
     val context = LocalContext.current
@@ -56,14 +64,105 @@ fun RutasBottomSheetContent(
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "Toca para desplegar la ruta y dibujar su trazo rojo",
+                    text = "Elige una línea para ver su recorrido y paraderos",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
 
+        val selectedRoute = rutaMapaConfig(selectedRouteTag)
+        val routeBuses = buses
+            .filter { it.tag in selectedRoute.busTags }
+            .sortedWith(compareBy<BusInfo> { it.etaMinutes }.thenBy { it.id })
+        val selectedColor = selectedRoute.uiColor(isDarkMode)
+
+        Text(
+            text = "ETA de ${selectedRoute.displayName} · DEMO LOCAL",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = selectedColor
+        )
+        routeBuses.forEachIndexed { index, bus ->
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onBusSelected(bus) },
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                ),
+                shape = RoundedCornerShape(18.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = selectedColor.copy(alpha = 0.14f),
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Navigation,
+                            contentDescription = "Rumbo ${bus.bearingDegrees.toInt()} grados",
+                            tint = selectedColor,
+                            modifier = Modifier
+                                .padding(10.dp)
+                                .rotate(bus.bearingDegrees)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = when (index) {
+                                0 -> "PRÓXIMO · ${bus.id}"
+                                1 -> "SIGUIENTE · ${bus.id}"
+                                else -> "UNIDAD ${index + 1} · ${bus.id}"
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = selectedColor
+                        )
+                        Text(
+                            text = bus.nextStopName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1
+                        )
+                        Text(
+                            text = "${bus.distance} · Rumbo ${bus.bearingDegrees.toInt()}°",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            text = "${bus.etaMinutes}",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = selectedColor
+                        )
+                        Text(
+                            text = "min",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
+        HorizontalDivider()
+
         cuscoRutasList.forEach { ruta ->
+            val routeConfig = rutaMapaConfig(ruta.code)
+            val routeColor = routeConfig.uiColor(isDarkMode)
+            val onRouteColor = if (isDarkMode) MaterialTheme.colorScheme.surface else Color.White
             val isSelected = selectedRouteTag == ruta.code
             val isExpanded = expandedRouteCode == ruta.code
 
@@ -77,8 +176,8 @@ fun RutasBottomSheetContent(
                         expandedRouteCode = if (isExpanded) null else ruta.code
                     },
                 colors = CardDefaults.cardColors(
-                    containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
-                    contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                    containerColor = if (isSelected) routeColor.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceContainerLow,
+                    contentColor = MaterialTheme.colorScheme.onSurface
                 ),
                 elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 4.dp else 1.dp),
                 shape = RoundedCornerShape(20.dp)
@@ -92,13 +191,13 @@ fun RutasBottomSheetContent(
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
-                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest,
+                                color = if (isSelected) routeColor else MaterialTheme.colorScheme.surfaceContainerHighest,
                                 modifier = Modifier.size(44.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.AltRoute,
                                     contentDescription = null,
-                                    tint = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    tint = if (isSelected) onRouteColor else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(10.dp)
                                 )
                             }
@@ -112,7 +211,7 @@ fun RutasBottomSheetContent(
                                 Text(
                                     text = ruta.company,
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary
+                                    color = routeColor
                                 )
                             }
                         }
@@ -120,14 +219,14 @@ fun RutasBottomSheetContent(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             if (isSelected) {
                                 Surface(
-                                    color = MaterialTheme.colorScheme.primary,
+                                    color = routeColor,
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
                                     Text(
-                                        text = "● TRAZO ROJO",
+                                        text = "SELECCIONADA",
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onPrimary,
+                                        color = onRouteColor,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
@@ -143,7 +242,7 @@ fun RutasBottomSheetContent(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Navigation, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Filled.Navigation, contentDescription = null, modifier = Modifier.size(16.dp), tint = routeColor)
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = ruta.itinerary,
@@ -163,7 +262,7 @@ fun RutasBottomSheetContent(
                                 text = "Descripción del Recorrido:",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
+                                color = routeColor
                             )
                             Text(
                                 text = ruta.description,
@@ -191,7 +290,7 @@ fun RutasBottomSheetContent(
                                     text = "${ruta.activeBusesCount} unidades activas",
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
+                                    color = routeColor
                                 )
                             }
                         }
