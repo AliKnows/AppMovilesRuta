@@ -36,5 +36,11 @@ data class BusInfo(
     val iconColor: Color,
     val driverName: String = "Juan Yasser",
     val latLng: LatLng,
-    val isFavorite: Boolean = false
+    val isFavorite: Boolean = false,
+    val etaMinutes: Int = 0,
+    val nextStopName: String = "Próximo paradero",
+    val bearingDegrees: Float = 0f,
+    val routeProgress: Float = 0f,
+    val lastUpdatedAtMillis: Long = 0L,
+    val isDemo: Boolean = false
 )

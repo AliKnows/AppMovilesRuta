@@ -9,7 +9,11 @@ import android.graphics.Paint
 import android.graphics.RectF
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.AltRoute
@@ -19,6 +23,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -27,6 +33,7 @@ import androidx.core.content.ContextCompat
 import com.ggs.qosqoruta.core.preferences.SessionManager
 import com.ggs.qosqoruta.features.auth.domain.models.UserRole
 import com.ggs.qosqoruta.features.mapa.data.*
+import com.ggs.qosqoruta.features.mapa.domain.models.BusInfo
 import com.ggs.qosqoruta.features.mapa.presentation.components.EnVivoBottomSheetContent
 import com.ggs.qosqoruta.features.mapa.presentation.components.ExplorarBottomSheetContent
 import com.ggs.qosqoruta.features.mapa.presentation.components.FavoritosBottomSheetContent
@@ -36,7 +43,9 @@ import com.google.android.gms.maps.MapsInitializer
 import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.RoundCap
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapUiSettings
@@ -51,7 +60,11 @@ import java.util.Calendar
 import java.util.Locale
 
 // GENERADOR DEL ÍCONO PERSONALIZADO DE AUTOBÚS PROTEGIDO CONTRA ERRORES DE INICIALIZACIÓN DE MAPAS
-fun getCustomBusIconDescriptor(context: Context): BitmapDescriptor {
+fun getCustomBusIconDescriptor(
+    context: Context,
+    routeColor: Color = Color(0xFF00875A),
+    unitCode: String = "BUS"
+): BitmapDescriptor {
     return try {
         MapsInitializer.initialize(context)
         val width = 110
@@ -68,7 +81,7 @@ fun getCustomBusIconDescriptor(context: Context): BitmapDescriptor {
         }
 
         val fillPaint = Paint().apply {
-            color = android.graphics.Color.WHITE
+            color = routeColor.toArgb()
             isAntiAlias = true
             style = Paint.Style.FILL
         }
@@ -79,6 +92,18 @@ fun getCustomBusIconDescriptor(context: Context): BitmapDescriptor {
 
         val windowRect = RectF(16f, 16f, 94f, 32f)
         canvas.drawRoundRect(windowRect, 6f, 6f, strokePaint)
+
+        val labelPaint = Paint().apply {
+            color = android.graphics.Color.WHITE
+            isAntiAlias = true
+            textAlign = Paint.Align.CENTER
+            textSize = 16f
+            typeface = android.graphics.Typeface.create(
+                android.graphics.Typeface.DEFAULT,
+                android.graphics.Typeface.BOLD
+            )
+        }
+        canvas.drawText(unitCode.takeLast(4), 55f, 47f, labelPaint)
 
         val wheelPaint = Paint().apply {
             color = android.graphics.Color.BLACK
@@ -103,6 +128,40 @@ fun getCustomBusIconDescriptor(context: Context): BitmapDescriptor {
     }
 }
 
+@Composable
+private fun BusMapMarker(
+    bus: BusInfo,
+    icon: BitmapDescriptor,
+    onClick: () -> Unit
+) {
+    val markerState = remember(bus.id) { MarkerState(position = bus.latLng) }
+
+    LaunchedEffect(bus.id, bus.latLng) {
+        val start = markerState.position
+        val frames = 10
+        for (frame in 1..frames) {
+            val fraction = frame / frames.toFloat()
+            markerState.position = LatLng(
+                start.latitude + (bus.latLng.latitude - start.latitude) * fraction,
+                start.longitude + (bus.latLng.longitude - start.longitude) * fraction
+            )
+            delay(50)
+        }
+    }
+
+    Marker(
+        state = markerState,
+        title = "Unidad ${bus.id} · ${bus.name}",
+        snippet = "${bus.etaMinutes} min · ${bus.nextStopName} · DEMO",
+        icon = icon,
+        rotation = (bus.bearingDegrees - 90f + 360f) % 360f,
+        onClick = {
+            onClick()
+            true
+        }
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MapaScreen(
@@ -115,15 +174,6 @@ fun MapaScreen(
     val sessionManager = remember { SessionManager(context) }
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
 
-    // DIBUJO SEGURO DE ÍCONO CON MANEJO DE EXCEPCIONES
-    val busIconDescriptor = remember(context) {
-        try {
-            getCustomBusIconDescriptor(context)
-        } catch (e: Throwable) {
-            BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE)
-        }
-    }
-
     val userRole = sessionManager.getUserRole()
     val isDriver = userRole == UserRole.CONDUCTOR
     val company = sessionManager.getDriverCompany()
@@ -131,6 +181,17 @@ fun MapaScreen(
 
     var selectedBottomTab by remember { mutableIntStateOf(0) } // 0 = Explorar, 1 = Rutas, 2 = En Vivo, 3 = Favoritos
     var selectedRouteTag by remember { mutableStateOf("RTI-07") }
+    val selectedRouteConfig = rutaMapaConfig(selectedRouteTag)
+    val animatedRouteColor by animateColorAsState(
+        targetValue = selectedRouteConfig.uiColor(isDarkMode),
+        animationSpec = tween(durationMillis = 350),
+        label = "selectedRouteColor"
+    )
+    val animatedRouteLineColor by animateColorAsState(
+        targetValue = selectedRouteConfig.color,
+        animationSpec = tween(durationMillis = 350),
+        label = "selectedRouteLineColor"
+    )
 
     var mapSearchQuery by remember { mutableStateOf("") }
 
@@ -186,14 +247,36 @@ fun MapaScreen(
     }
 
     val initialFavs = remember { sessionManager.getFavoriteBusIds() }
-    val busesList = remember {
-        mutableStateListOf(
-            *availableBuses.map { bus ->
-                bus.copy(isFavorite = initialFavs.contains(bus.id))
-            }.toTypedArray()
-        )
+    val fleetStore = remember { LocalFleetStore(initialFavs) }
+    val busesList by fleetStore.buses.collectAsState()
+    var activeBusId by remember { mutableStateOf("B1") }
+    val activeBus = busesList.firstOrNull { it.id == activeBusId } ?: busesList.first()
+    val busIconDescriptors = remember(context, busesList.map { it.id }) {
+        busesList.associate { bus ->
+            bus.id to getCustomBusIconDescriptor(
+                context,
+                rutaMapaConfig(bus.tag).color,
+                bus.id
+            )
+        }
     }
-    var activeBus by remember { mutableStateOf(busesList[0]) }
+
+    LaunchedEffect(fleetStore) {
+        while (true) {
+            delay(1_000)
+            fleetStore.advanceSimulation()
+        }
+    }
+    val animatedActiveBusRouteColor by animateColorAsState(
+        targetValue = rutaMapaConfig(activeBus.tag).uiColor(isDarkMode),
+        animationSpec = tween(durationMillis = 350),
+        label = "activeBusRouteColor"
+    )
+    val animatedActiveBusLineColor by animateColorAsState(
+        targetValue = rutaMapaConfig(activeBus.tag).color,
+        animationSpec = tween(durationMillis = 350),
+        label = "activeBusLineColor"
+    )
 
     var blueLineProgress by remember { mutableFloatStateOf(1f) }
 
@@ -217,23 +300,19 @@ fun MapaScreen(
         position = CameraPosition.fromLatLngZoom(userLatLng, 14f)
     }
 
-    LaunchedEffect(selectedBottomTab) {
-        val currentFavs = sessionManager.getFavoriteBusIds()
-        busesList.indices.forEach { index ->
-            val bus = busesList[index]
-            val isFav = currentFavs.contains(bus.id)
-            if (bus.isFavorite != isFav) {
-                busesList[index] = bus.copy(isFavorite = isFav)
-            }
+    val focusBus: (BusInfo) -> Unit = { bus ->
+        activeBusId = bus.id
+        selectedRouteTag = rutaMapaConfig(bus.tag).code
+        scope.launch {
+            cameraPositionState.animate(
+                CameraUpdateFactory.newLatLngZoom(bus.latLng, 16f),
+                durationMs = 900
+            )
         }
     }
 
-    val activeRoutePolyline = when (selectedRouteTag) {
-        "RTI-07", "RT-04" -> rti07NuevoMiradorPolyline
-        "RTU-01", "C4-M" -> rtu01PatronPolyline
-        "RTI-01", "R-21" -> rti01SayllaHuasaoPolyline
-        "LEONES", "LOS LEONES" -> losLeonesPolyline
-        else -> rti07NuevoMiradorPolyline
+    LaunchedEffect(selectedBottomTab) {
+        fleetStore.updateFavorites(sessionManager.getFavoriteBusIds())
     }
 
     val bottomSheetScaffoldState = rememberBottomSheetScaffoldState(
@@ -245,24 +324,12 @@ fun MapaScreen(
 
     val toggleFavorite: (String) -> Unit = { busId ->
         val updatedFavs = sessionManager.toggleFavoriteBus(busId)
-        val index = busesList.indexOfFirst { it.id == busId }
-        if (index != -1) {
-            val bus = busesList[index]
-            val updated = bus.copy(isFavorite = updatedFavs.contains(busId))
-            busesList[index] = updated
-            if (activeBus.id == busId) activeBus = updated
-        }
+        fleetStore.updateFavorites(updatedFavs)
     }
 
     val removeFavorite: (String) -> Unit = { busId ->
         val updatedFavs = sessionManager.removeFavoriteBus(busId)
-        val index = busesList.indexOfFirst { it.id == busId }
-        if (index != -1) {
-            val bus = busesList[index]
-            val updated = bus.copy(isFavorite = false)
-            busesList[index] = updated
-            if (activeBus.id == busId) activeBus = updated
-        }
+        fleetStore.updateFavorites(updatedFavs)
     }
 
     Scaffold(
@@ -274,6 +341,11 @@ fun MapaScreen(
             ) {
                 NavigationBarItem(
                     selected = selectedBottomTab == 0,
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = animatedRouteColor,
+                        selectedTextColor = animatedRouteColor,
+                        indicatorColor = animatedRouteColor.copy(alpha = 0.14f)
+                    ),
                     onClick = {
                         selectedBottomTab = 0
                         scope.launch { bottomSheetScaffoldState.bottomSheetState.partialExpand() }
@@ -283,6 +355,11 @@ fun MapaScreen(
                 )
                 NavigationBarItem(
                     selected = selectedBottomTab == 1,
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = animatedRouteColor,
+                        selectedTextColor = animatedRouteColor,
+                        indicatorColor = animatedRouteColor.copy(alpha = 0.14f)
+                    ),
                     onClick = {
                         selectedBottomTab = 1
                         scope.launch { bottomSheetScaffoldState.bottomSheetState.partialExpand() }
@@ -292,6 +369,11 @@ fun MapaScreen(
                 )
                 NavigationBarItem(
                     selected = selectedBottomTab == 2,
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = animatedRouteColor,
+                        selectedTextColor = animatedRouteColor,
+                        indicatorColor = animatedRouteColor.copy(alpha = 0.14f)
+                    ),
                     onClick = {
                         selectedBottomTab = 2
                         scope.launch { bottomSheetScaffoldState.bottomSheetState.partialExpand() }
@@ -301,6 +383,11 @@ fun MapaScreen(
                 )
                 NavigationBarItem(
                     selected = selectedBottomTab == 3,
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = animatedRouteColor,
+                        selectedTextColor = animatedRouteColor,
+                        indicatorColor = animatedRouteColor.copy(alpha = 0.14f)
+                    ),
                     onClick = {
                         selectedBottomTab = 3
                         scope.launch { bottomSheetScaffoldState.bottomSheetState.partialExpand() }
@@ -328,14 +415,15 @@ fun MapaScreen(
                         route = route,
                         externalSearchQuery = mapSearchQuery,
                         onBusSelected = { bus ->
-                            activeBus = bus
-                            cameraPositionState.position = CameraPosition.fromLatLngZoom(bus.latLng, 16f)
+                            focusBus(bus)
+                            selectedRouteTag = rutaMapaConfig(bus.tag).code
                             scope.launch {
                                 bottomSheetScaffoldState.bottomSheetState.partialExpand()
                             }
                         },
                         onFollowBusClick = { bus ->
-                            activeBus = bus
+                            focusBus(bus)
+                            selectedRouteTag = rutaMapaConfig(bus.tag).code
                             selectedBottomTab = 2
                             scope.launch {
                                 bottomSheetScaffoldState.bottomSheetState.partialExpand()
@@ -351,17 +439,26 @@ fun MapaScreen(
                     )
                     1 -> RutasBottomSheetContent(
                         selectedRouteTag = selectedRouteTag,
+                        isDarkMode = isDarkMode,
+                        buses = busesList,
                         onSelectRoute = { routeCode ->
                             selectedRouteTag = routeCode
-                            val busMatch = busesList.find { it.tag == routeCode }
-                            if (busMatch != null) activeBus = busMatch
+                            val routeConfig = rutaMapaConfig(routeCode)
+                            busesList
+                                .filter { it.tag in routeConfig.busTags }
+                                .minByOrNull { it.etaMinutes }
+                                ?.let { activeBusId = it.id }
                             scope.launch {
                                 bottomSheetScaffoldState.bottomSheetState.partialExpand()
                             }
+                        },
+                        onBusSelected = { bus ->
+                            focusBus(bus)
                         }
                     )
                     2 -> EnVivoBottomSheetContent(
                         activeBus = activeBus,
+                        routeColor = animatedActiveBusRouteColor,
                         onStopFollowingClick = {
                             selectedBottomTab = 0
                             scope.launch {
@@ -372,8 +469,8 @@ fun MapaScreen(
                     3 -> FavoritosBottomSheetContent(
                         favoriteBuses = busesList.filter { it.isFavorite },
                         onFollowBusClick = { bus ->
-                            activeBus = bus
-                            selectedRouteTag = bus.tag
+                            focusBus(bus)
+                            selectedRouteTag = rutaMapaConfig(bus.tag).code
                             selectedBottomTab = 2
                             scope.launch {
                                 bottomSheetScaffoldState.bottomSheetState.partialExpand()
@@ -409,29 +506,25 @@ fun MapaScreen(
                                 )
                             }
                             busesList.forEach { bus ->
-                                Marker(
-                                    state = MarkerState(position = bus.latLng),
-                                    title = "${bus.name} (${bus.tag}) - Cond: ${bus.driverName}",
-                                    snippet = "Ocupación: ${bus.occupancy} | ETA: ${bus.eta}",
-                                    icon = busIconDescriptor
+                                BusMapMarker(
+                                    bus = bus,
+                                    icon = busIconDescriptors[bus.id]
+                                        ?: BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN),
+                                    onClick = { focusBus(bus) }
                                 )
                             }
                         }
                         1 -> {
                             Polyline(
-                                points = activeRoutePolyline,
-                                color = Color(0xFFE53935),
-                                width = 14f
+                                points = selectedRouteConfig.polyline,
+                                color = animatedRouteLineColor,
+                                width = 14f,
+                                startCap = RoundCap(),
+                                endCap = RoundCap()
                             )
 
                             val routeParaderos = cuscoParaderosReales.filter { paradero ->
-                                when (selectedRouteTag) {
-                                    "RTI-07", "RT-04" -> paradero.snippet.contains("RTI-07")
-                                    "RTU-01", "C4-M" -> paradero.snippet.contains("RTU-01")
-                                    "RTI-01", "R-21" -> paradero.snippet.contains("RTI-01")
-                                    "LEONES", "LOS LEONES" -> paradero.snippet.contains("Leones")
-                                    else -> true
-                                }
+                                paradero.snippet.contains(selectedRouteConfig.stopSnippet, ignoreCase = true)
                             }
                             routeParaderos.forEach { paradero ->
                                 Marker(
@@ -442,48 +535,61 @@ fun MapaScreen(
                                 )
                             }
 
-                            val routeBuses = busesList.filter { bus ->
-                                when (selectedRouteTag) {
-                                    "RTI-07", "RT-04" -> bus.tag == "RTI-07" || bus.tag == "RT-04"
-                                    "RTU-01", "C4-M" -> bus.tag == "RTU-01" || bus.tag == "C4-M"
-                                    "RTI-01", "R-21" -> bus.tag == "RTI-01" || bus.tag == "R-21"
-                                    else -> true
-                                }
-                            }
+                            val routeBuses = busesList.filter { bus -> bus.tag in selectedRouteConfig.busTags }
                             routeBuses.forEach { bus ->
-                                Marker(
-                                    state = MarkerState(position = bus.latLng),
-                                    title = "${bus.name} (${bus.tag}) - Cond: ${bus.driverName}",
-                                    snippet = "Ocupación: ${bus.occupancy} | ETA: ${bus.eta}",
-                                    icon = busIconDescriptor
+                                BusMapMarker(
+                                    bus = bus,
+                                    icon = busIconDescriptors[bus.id]
+                                        ?: BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN),
+                                    onClick = { focusBus(bus) }
                                 )
                             }
                         }
                         2 -> {
-                            val calendar = Calendar.getInstance().apply { add(Calendar.MINUTE, 3) }
+                            val activeRouteConfig = rutaMapaConfig(activeBus.tag)
+                            Polyline(
+                                points = activeRouteConfig.polyline,
+                                color = animatedActiveBusLineColor.copy(alpha = 0.42f),
+                                width = 8f,
+                                startCap = RoundCap(),
+                                endCap = RoundCap()
+                            )
+                            busesList
+                                .filter { it.tag in activeRouteConfig.busTags }
+                                .forEach { bus ->
+                                    BusMapMarker(
+                                        bus = bus,
+                                        icon = busIconDescriptors[bus.id]
+                                            ?: BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN),
+                                        onClick = { focusBus(bus) }
+                                    )
+                                }
+
+                            val nextStop = cuscoParaderosReales.firstOrNull {
+                                it.name == activeBus.nextStopName
+                            }
+                            val targetLatLng = nextStop?.location ?: userLatLng
+                            val calendar = Calendar.getInstance().apply {
+                                add(Calendar.MINUTE, activeBus.etaMinutes)
+                            }
                             val arrivalTimeStr = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(calendar.time)
 
-                            val currentEndLat = activeBus.latLng.latitude + (userLatLng.latitude - activeBus.latLng.latitude) * blueLineProgress
-                            val currentEndLng = activeBus.latLng.longitude + (userLatLng.longitude - activeBus.latLng.longitude) * blueLineProgress
+                            val currentEndLat = activeBus.latLng.latitude + (targetLatLng.latitude - activeBus.latLng.latitude) * blueLineProgress
+                            val currentEndLng = activeBus.latLng.longitude + (targetLatLng.longitude - activeBus.latLng.longitude) * blueLineProgress
                             val currentEndLatLng = LatLng(currentEndLat, currentEndLng)
 
                             Polyline(
                                 points = listOf(activeBus.latLng, currentEndLatLng),
-                                color = Color(0xFF1565C0),
-                                width = 12f
+                                color = animatedActiveBusLineColor,
+                                width = 12f,
+                                startCap = RoundCap(),
+                                endCap = RoundCap()
                             )
 
                             Marker(
-                                state = MarkerState(position = activeBus.latLng),
-                                title = "🚌 ${activeBus.name} (${activeBus.tag})",
-                                snippet = "Sentido: SUBIDA ➔ Hacia Saylla | Cond: ${activeBus.driverName}",
-                                icon = busIconDescriptor
-                            )
-
-                            Marker(
-                                state = MarkerState(position = userLatLng),
-                                title = "📍 Tu Paradero: Manuel Prado",
-                                snippet = "Hora de llegada: $arrivalTimeStr (🟢 En camino)",
+                                state = MarkerState(position = targetLatLng),
+                                title = "📍 ${activeBus.nextStopName}",
+                                snippet = "Llegada estimada: $arrivalTimeStr · ${activeBus.etaMinutes} min · DEMO",
                                 icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)
                             )
                         }
@@ -560,69 +666,118 @@ fun MapaScreen(
                             .padding(16.dp)
                             .align(Alignment.TopCenter),
                         shape = RoundedCornerShape(28.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        color = lerp(
+                            MaterialTheme.colorScheme.surfaceContainerHigh,
+                            animatedRouteColor,
+                            0.10f
+                        ),
                         tonalElevation = 8.dp,
                         shadowElevation = 6.dp
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(onClick = onOpenMenu) {
-                                Icon(
-                                    imageVector = Icons.Filled.Menu,
-                                    contentDescription = "Menú Principal",
-                                    tint = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-
-                            Box(
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Row(
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .padding(horizontal = 4.dp)
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                TextField(
-                                    value = mapSearchQuery,
-                                    onValueChange = { mapSearchQuery = it },
-                                    placeholder = {
-                                        Text(
-                                            "Buscar paradero o lugar...",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    },
-                                    singleLine = true,
-                                    colors = TextFieldDefaults.colors(
-                                        focusedContainerColor = Color.Transparent,
-                                        unfocusedContainerColor = Color.Transparent,
-                                        disabledContainerColor = Color.Transparent,
-                                        focusedIndicatorColor = Color.Transparent,
-                                        unfocusedIndicatorColor = Color.Transparent
-                                    ),
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-
-                            if (mapSearchQuery.isNotBlank()) {
-                                IconButton(onClick = { mapSearchQuery = "" }) {
+                                IconButton(onClick = onOpenMenu) {
                                     Icon(
-                                        imageVector = Icons.Filled.Clear,
-                                        contentDescription = "Limpiar Búsqueda",
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        imageVector = Icons.Filled.Menu,
+                                        contentDescription = "Menú Principal",
+                                        tint = animatedRouteColor
+                                    )
+                                }
+
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(horizontal = 4.dp)
+                                ) {
+                                    TextField(
+                                        value = mapSearchQuery,
+                                        onValueChange = { mapSearchQuery = it },
+                                        placeholder = {
+                                            Text(
+                                                "Buscar paradero o lugar...",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        },
+                                        singleLine = true,
+                                        colors = TextFieldDefaults.colors(
+                                            focusedContainerColor = Color.Transparent,
+                                            unfocusedContainerColor = Color.Transparent,
+                                            disabledContainerColor = Color.Transparent,
+                                            focusedIndicatorColor = Color.Transparent,
+                                            unfocusedIndicatorColor = Color.Transparent,
+                                            cursorColor = animatedRouteColor
+                                        ),
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+
+                                if (mapSearchQuery.isNotBlank()) {
+                                    IconButton(onClick = { mapSearchQuery = "" }) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Clear,
+                                            contentDescription = "Limpiar Búsqueda",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+
+                                IconButton(onClick = { onThemeChanged(!isDarkMode) }) {
+                                    Icon(
+                                        imageVector = if (isDarkMode) Icons.Filled.LightMode else Icons.Filled.DarkMode,
+                                        contentDescription = "Alternar Modo Oscuro",
+                                        tint = MaterialTheme.colorScheme.onSurface
                                     )
                                 }
                             }
 
-                            IconButton(onClick = { onThemeChanged(!isDarkMode) }) {
-                                Icon(
-                                    imageVector = if (isDarkMode) Icons.Filled.LightMode else Icons.Filled.DarkMode,
-                                    contentDescription = "Alternar Modo Oscuro",
-                                    tint = MaterialTheme.colorScheme.onSurface
-                                )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState())
+                                    .padding(start = 12.dp, end = 12.dp, bottom = 10.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                cuscoRutasMapa.forEach { config ->
+                                    val isSelected = selectedRouteConfig.code == config.code
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = {
+                                            selectedRouteTag = config.code
+                                            busesList
+                                                .filter { it.tag in config.busTags }
+                                                .minByOrNull { it.etaMinutes }
+                                                ?.let { activeBusId = it.id }
+                                            selectedBottomTab = 1
+                                            scope.launch {
+                                                bottomSheetScaffoldState.bottomSheetState.partialExpand()
+                                            }
+                                        },
+                                        label = { Text(config.displayName, maxLines = 1) },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Filled.Circle,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                        },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            iconColor = config.uiColor(isDarkMode),
+                                            selectedContainerColor = config.uiColor(isDarkMode).copy(alpha = 0.14f),
+                                            selectedLabelColor = config.uiColor(isDarkMode),
+                                            selectedLeadingIconColor = config.uiColor(isDarkMode)
+                                        )
+                                    )
+                                }
                             }
                         }
                     }
